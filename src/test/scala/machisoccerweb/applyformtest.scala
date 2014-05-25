@@ -90,7 +90,6 @@ class MachisoccerFormSpec extends FlatSpec with ShouldMatchers with HtmlUnit {
 
   private def getUrl(): String = {
     // get url from system property unless it is unspecified
-    //"http://goo.gl/RE5QRW"
     Properties.envOrElse("TARGET_URL", localDebugFormUrl)
   }
 
