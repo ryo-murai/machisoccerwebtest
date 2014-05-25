@@ -2,6 +2,7 @@ package machisoccer
 
 import com.github.nscala_time.time.Imports._
 
+import scala.util.Properties
 import org.scalatest._
 import org.scalatest.selenium._
 import org.openqa.selenium._
@@ -10,7 +11,6 @@ import org.openqa.selenium.support.ui._
 import org.openqa.selenium.support.ui.ExpectedConditions._
 
 class MachisoccerFormSpec extends FlatSpec with ShouldMatchers with HtmlUnit {
-  //implicit val webDriver: WebDriver = new HtmlUnitDriver
 
   // initialize webDriver
   webDriver.setJavascriptEnabled(false)
@@ -18,12 +18,7 @@ class MachisoccerFormSpec extends FlatSpec with ShouldMatchers with HtmlUnit {
 
   val url = getUrl()
 
-  val titleMonMatch = """\((\d+)/(\d+)\)""".r
-  //val dateFormat = """\d\d\d\d/\d+/\d+"""
-  //val eventDatesMatch = s"""月の開催予定は.*(${dateFormat}\(.*\)[,、]?\s?)+の(\d+)回""".r
-  //val dateMatch = s"""(${dateFormat})""".r
-
-  "The Machisoccer application form page" should "have consistent month and days for the events" in {
+  "The Machisoccer application form page" should "have proper title" in {
     openForm()
 
     val (year, month) = extractYearMonth(pageTitle)
@@ -34,20 +29,73 @@ class MachisoccerFormSpec extends FlatSpec with ShouldMatchers with HtmlUnit {
     month should be < 13
   }
 
-  "The Machisoccer application form page" should "have proper description" in {
+  it should "have proper description" in {
+    openForm()
+
+    val desc = getDesc()
+
+    desc.month should be < 13
+    withClue(s"consistency between events and number:") {
+      desc.eventDates.length should be (desc.numEvents)
+    }
+    withClue("shinnendo description :") {
+      if(desc.shinnendo) desc.month should be < 6 
+      else desc.month should be > 5
+    }
+
+    desc.eventDates.foreach { d =>
+      withClue(s"month of event date for $d :") {
+        d.monthOfYear.get should be (desc.month)
+      }
+
+      desc.dueDate should be < d
+    }
+  }
+
+  it should "be consistent in title and description" in {
     openForm()
 
     val (year, month) = extractYearMonth(pageTitle)
-    val description = getDescriptionText()
+    val desc = getDesc()
+    withClue("month written in title and description: ") {
+      month should be (desc.month)
+    }
 
-    description should include(s"${month}月の開催予定")
+    desc.eventDates.foreach { d =>
+      withClue(s"year of event date for $d :") {
+        d.year.get should be (year)
+      }
+      withClue(s"month of event date for $d :") {
+        d.monthOfYear.get should be (month)
+      }
+    }
+  }
 
+  it should "have event attend items stated in the description" in {
+    openForm()
+    val desc = getDesc()
+    val eventItems = formItemLabels().toSeq
+                      .filter{_.startsWith("20")}
+                      .map{_.replace("*", "").trim}
+
+    withClue("compare num events in form item and description") {
+      desc.numEvents should be (eventItems.length)
+    }
+
+    val formItemDates = eventItems.map(MachisoccerWeb.parseDateEx(_))
+    withClue("compare description and form items") {
+      desc.eventDates should equal (formItemDates)
+    }
   }
 
   private def getUrl(): String = {
     // get url from system property unless it is unspecified
-    new java.io.File("src/test/resources/form/index.htm").toURI().toASCIIString
+    //"http://goo.gl/RE5QRW"
+    Properties.envOrElse("TARGET_URL", localDebugFormUrl)
   }
+
+  private lazy val localDebugFormUrl: String = 
+    new java.io.File("src/test/resources/form/index.htm").toURI().toASCIIString
 
   private def openForm(): Unit = {
     go to url
@@ -64,4 +112,11 @@ class MachisoccerFormSpec extends FlatSpec with ShouldMatchers with HtmlUnit {
     xpath("/html/body/div/div/div[2]/div/div[1]").element.text
   }
 
+  private def getDesc(): Descr= {
+    MachisoccerWeb.parseDesc(getDescriptionText())
+  }
+
+  private def formItemLabels() = {
+    xpath("""//*[@id='ss-form']/ol/div/div/div/label/div[1]""").findAllElements.map(_.text)
+  }
 }
